@@ -1,0 +1,29 @@
+debug/
+target/
+**/*.rs.bk
+*.pdb
+.idea/
+.vscode/
+.config/
+.venv/
+/bazel-*
+/output/
+rust-project.json
+/build/
+
+# don't check in this real config
+ignore*.yaml
+config.yaml
+cache.db
+Country.mmdb
+ruleset/
+geosite.dat
+
+# for NixOS direnv
+.envrc
+shell.nix
+
+# macOS
+.DS_Store
+
+codecov.json
