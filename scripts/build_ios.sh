@@ -4,19 +4,18 @@ set -e  # Exit on errors
 set -o pipefail  # Fail pipeline if any command fails
 
 # Targets
-IOS_ARCHS=("aarch64-apple-ios" )
+IOS_ARCHS=("aarch64-apple-ios")
 
 # Variables
-CRATE_NAME="clash_ffi"
+CRATE_NAME="clash-ffi"
 LIB_NAME="clashrs"
 PACKAGE_NAME="LibClashRs"
 OUTPUT_DIR="build"
 
 HEADERS_DIR="${OUTPUT_DIR}/Headers"
-HEADERS_DIR_PACKAGE="${OUTPUT_DIR}/Headers/${LIB_NAME}"
-HEADER_FILE="${HEADERS_DIR_PACKAGE}/${LIB_NAME}.h"
-MODULEMAP_FILE="${HEADERS_DIR_PACKAGE}/module.modulemap"
-XCFRAMEWORK_DIR="${OUTPUT_DIR}/${PACKAGE_NAME}.xcframework"
+HEADER_FILE="${HEADERS_DIR}/${LIB_NAME}/${LIB_NAME}.h"
+MODULEMAP_FILE="${HEADERS_DIR}/${LIB_NAME}/module.modulemap"
+XCFRAMEWORK_DIR="${OUTPUT_DIR}/${LIB_NAME}.xcframework"
 
 # Ensure the toolchain from rust-toolchain.toml is installed and switched
 echo "Ensuring the Rust toolchain from rust-toolchain.toml is installed..."
@@ -58,13 +57,13 @@ EOF
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 mkdir -p "$HEADERS_DIR"
-mkdir -p "$HEADERS_DIR_PACKAGE"
 
 # Build for all targets
 echo "Building library for iOS and macOS targets..."
 for target in "${IOS_ARCHS[@]}"; do
     echo "Using target: $target"
-    cargo +$TOOLCHAIN build --target "$target" --release
+    echo "IPHONEOS_DEPLOYMENT_TARGET=10.0 cargo +$TOOLCHAIN build --package $CRATE_NAME --target "$target" --release"
+    IPHONEOS_DEPLOYMENT_TARGET=10.0 cargo +$TOOLCHAIN build --package $CRATE_NAME --target "$target" --release
     mkdir -p "$OUTPUT_DIR/$target"
     cp "target/$target/release/lib${LIB_NAME}.a" "$OUTPUT_DIR/$target/"
 done

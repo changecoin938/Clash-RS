@@ -8,7 +8,7 @@ IOS_ARCHS=("aarch64-apple-ios" "x86_64-apple-ios" "aarch64-apple-ios-sim")
 MACOS_ARCHS=("aarch64-apple-darwin" "x86_64-apple-darwin")
 
 # Variables
-CRATE_NAME="clash_ffi"
+CRATE_NAME="clash-ffi"
 LIB_NAME="clashrs"
 PACKAGE_NAME="LibClashRs"
 OUTPUT_DIR="build"
@@ -65,7 +65,7 @@ mkdir -p "$HEADERS_DIR_PACKAGE"
 echo "Building library for iOS and macOS targets..."
 for target in "${IOS_ARCHS[@]}" "${MACOS_ARCHS[@]}"; do
     echo "Using target: $target"
-    cargo +$TOOLCHAIN build --target "$target" --release
+    IPHONEOS_DEPLOYMENT_TARGET=10.0 cargo +$TOOLCHAIN build --package $CRATE_NAME --target "$target" --release
     mkdir -p "$OUTPUT_DIR/$target"
     cp "target/$target/release/lib${LIB_NAME}.a" "$OUTPUT_DIR/$target/"
 done
