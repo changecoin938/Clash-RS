@@ -23,6 +23,7 @@ use tracing::debug;
 
 mod datagram;
 mod stream;
+pub mod inbound;
 
 pub struct HandlerOptions {
     pub name: String,
@@ -71,7 +72,15 @@ impl Handler {
         };
 
         let s = if let Some(transport) = self.opts.transport.as_ref() {
-            transport.proxy_stream(s).await?
+            // mKCP is UDP-based; skip applying stream transport here to avoid misuse
+            if transport
+                .downcast_ref::<crate::proxy::transport::mkcp::Client>()
+                .is_some()
+            {
+                s
+            } else {
+                transport.proxy_stream(s).await?
+            }
         } else {
             s
         };

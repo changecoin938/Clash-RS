@@ -34,7 +34,7 @@ use crate::{
     print_and_exit,
     proxy::{
         AnyOutboundHandler,
-        direct::DIRECT_OUTBOUND_HANDLER,
+        direct::{self},
         fallback,
         group::smart,
         hysteria2, loadbalance, reject, relay,
@@ -213,18 +213,26 @@ impl OutboundManager {
         let mut connectors = HashMap::new();
         for handler in self.handlers.values() {
             if let Some(connector_name) = handler.support_dialer() {
-                let outbound = self.get_outbound(connector_name).ok_or(
-                    Error::InvalidConfig(format!(
+                // Support unix domain socket path: unix:/path or unix:///path
+                #[cfg(unix)]
+                if connector_name.starts_with("unix:") {
+                    let path = connector_name.trim_start_matches("unix:");
+                    let uds = Arc::new(crate::proxy::utils::UnixDomainConnector::new(path));
+                    handler.register_connector(uds).await;
+                    continue;
+                }
+
+                let outbound = self
+                    .get_outbound(connector_name)
+                    .ok_or(Error::InvalidConfig(format!(
                         "connector {connector_name} not found"
-                    )),
-                )?;
-                let connector =
-                    connectors.entry(connector_name).or_insert_with(|| {
-                        Arc::new(ProxyConnector::new(
-                            outbound,
-                            Box::new(DirectConnector::new()),
-                        ))
-                    });
+                    )))?;
+                let connector = connectors.entry(connector_name).or_insert_with(|| {
+                    Arc::new(ProxyConnector::new(
+                        outbound,
+                        Box::new(DirectConnector::new()),
+                    ))
+                });
                 handler.register_connector(connector.clone()).await;
             }
         }
@@ -238,11 +246,11 @@ impl OutboundManager {
         outbounds
             .into_iter()
             .filter_map(|outbound| match outbound {
-                OutboundProxyProtocol::Direct => {
-                    Some(Arc::new(DIRECT_OUTBOUND_HANDLER.clone()) as _)
+                OutboundProxyProtocol::Direct(d) => {
+                    Some(Arc::new(direct::Handler::new(&d.name)) as _)
                 }
-                OutboundProxyProtocol::Reject => {
-                    Some(Arc::new(reject::Handler::new()) as _)
+                OutboundProxyProtocol::Reject(r) => {
+                    Some(Arc::new(reject::Handler::new(&r.name)) as _)
                 }
                 #[cfg(feature = "shadowsocks")]
                 OutboundProxyProtocol::Ss(s) => {
@@ -267,6 +275,15 @@ impl OutboundManager {
                         })
                         .inspect_err(|e| {
                             error!("failed to load socks5 outbound {}: {}", name, e);
+                        })
+                        .ok()
+                }
+                OutboundProxyProtocol::Http(h) => {
+                    let name = h.common_opts.name.clone();
+                    h.try_into()
+                        .map(|x: crate::proxy::http::outbound::Handler| Arc::new(x) as _)
+                        .inspect_err(|e| {
+                            error!("failed to load http outbound {}: {}", name, e);
                         })
                         .ok()
                 }

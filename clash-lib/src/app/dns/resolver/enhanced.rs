@@ -116,7 +116,14 @@ impl EnhancedResolver {
                     .await,
                 )
             } else {
-                None
+                // Provide default fallback using default_nameserver for robustness
+                Some(
+                    make_clients(
+                        cfg.default_nameserver.clone(),
+                        Some(default_resolver.clone()),
+                    )
+                    .await,
+                )
             },
             fallback_domain_filters: if !cfg.fallback_filter.domain.is_empty() {
                 Some(vec![Box::new(DomainFilter::new(

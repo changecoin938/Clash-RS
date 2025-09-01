@@ -5,9 +5,11 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
-clash-lib = { path = "../clash-lib",  features = ["shadowsocks", "tuic", "ssh", "zero_copy"] }
+# For iOS/macOS XCFramework builds, enable minimal, mobile-safe features.
+# - Enable TLS backend via aws-lc-rs so watfaq-dns compiles (https/h3 listeners)
+# - Keep shadowsocks and zero_copy; omit ssh/tuic to avoid iOS-unfriendly deps
+clash-lib = { path = "../clash-lib", default-features = false, features = ["ring", "shadowsocks", "zero_copy"] }
 
 [lib]
 name = "clashrs"
-crate-type = ["staticlib", "cdylib"]
-
+crate-type = ["staticlib"]

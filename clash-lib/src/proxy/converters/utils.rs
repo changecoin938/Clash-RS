@@ -1,11 +1,9 @@
 use http::uri::InvalidUri;
 
 use crate::{
-    config::proxy::{CommonConfigOptions, GrpcOpt, H2Opt, WsOpt},
-    proxy::transport::{self, GrpcClient, H2Client, WsClient},
+    config::proxy::{CommonConfigOptions, GrpcOpt, H2Opt, HttpOpt, KcpOpt, WsOpt},
+    proxy::transport::{self, GrpcClient, H2Client, HttpClient, HttpUpgradeClient, WsClient, H3Client, XhttpClient},
 };
-use crate::config::proxy::TcpHttpOpt;
-use crate::proxy::transport::TcpHttpClient;
 
 impl TryFrom<(&WsOpt, &CommonConfigOptions)> for WsClient {
     type Error = std::io::Error;
@@ -74,21 +72,60 @@ impl TryFrom<(&H2Opt, &CommonConfigOptions)> for H2Client {
     }
 }
 
-impl TryFrom<(&TcpHttpOpt, &CommonConfigOptions)> for TcpHttpClient {
-    type Error = InvalidUri;
+impl TryFrom<(&HttpOpt, &CommonConfigOptions)> for HttpClient {
+    type Error = http::uri::InvalidUri;
 
-    fn try_from(pair: (&TcpHttpOpt, &CommonConfigOptions)) -> Result<Self, Self::Error> {
+    fn try_from(pair: (&HttpOpt, &CommonConfigOptions)) -> Result<Self, Self::Error> {
         let (x, common) = pair;
-        let host = x
-            .host
+        let path = x.path.as_ref().cloned().unwrap_or_else(|| "/".to_owned());
+        let method = x
+            .method
             .as_ref()
-            .map(|x| x.to_owned())
-            .unwrap_or(common.server.to_owned());
-        let path = x.path.as_ref().map(|x| x.to_owned()).unwrap_or_default();
-
-        Ok(TcpHttpClient::new(
-            host,
+            .map(|m| if m.eq_ignore_ascii_case("get") { http::Method::GET } else { http::Method::POST })
+            .unwrap_or(http::Method::POST);
+        let headers = x.headers.as_ref().cloned().unwrap_or_default();
+        Ok(HttpClient::new(
+            common.server.to_owned(),
             path.try_into()?,
+            method,
+            headers,
         ))
+    }
+}
+
+impl TryFrom<(&HttpOpt, &CommonConfigOptions)> for HttpUpgradeClient {
+    type Error = http::uri::InvalidUri;
+
+    fn try_from(pair: (&HttpOpt, &CommonConfigOptions)) -> Result<Self, Self::Error> {
+        let (x, common) = pair;
+        let path = x.path.as_ref().cloned().unwrap_or_else(|| "/".to_owned());
+        let headers = x.headers.as_ref().cloned().unwrap_or_default();
+        Ok(HttpUpgradeClient::new(common.server.to_owned(), path.try_into()?, headers))
+    }
+}
+
+impl TryFrom<(&HttpOpt, &CommonConfigOptions)> for H3Client {
+    type Error = http::uri::InvalidUri;
+
+    fn try_from(pair: (&HttpOpt, &CommonConfigOptions)) -> Result<Self, Self::Error> {
+        let (_x, common) = pair;
+        Ok(transport::H3Client::new(common.server.to_owned(), common.port, Default::default()))
+    }
+}
+
+impl TryFrom<(&HttpOpt, &CommonConfigOptions)> for XhttpClient {
+    type Error = http::uri::InvalidUri;
+
+    fn try_from(pair: (&HttpOpt, &CommonConfigOptions)) -> Result<Self, Self::Error> {
+        let (_x, common) = pair;
+        Ok(transport::XhttpClient::new(common.server.to_owned(), common.port, Default::default()))
+    }
+}
+
+// Placeholder mapping for KCP options (transport not yet implemented)
+impl TryFrom<(&KcpOpt, &CommonConfigOptions)> for crate::proxy::transport::KcpClient {
+    type Error = std::io::Error;
+    fn try_from(_pair: (&KcpOpt, &CommonConfigOptions)) -> Result<Self, Self::Error> {
+        Ok(crate::proxy::transport::KcpClient::new())
     }
 }

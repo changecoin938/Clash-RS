@@ -4,6 +4,7 @@ pub mod shadowquic;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks5;
+pub mod http;
 #[cfg(feature = "ssh")]
 pub mod ssh;
 #[cfg(feature = "onion")]

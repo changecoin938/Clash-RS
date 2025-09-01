@@ -62,6 +62,44 @@ fn global_direct_connector() -> Arc<dyn RemoteConnector> {
     Arc::new(DirectConnector::new())
 }
 
+#[cfg(unix)]
+#[derive(Debug, Clone)]
+pub struct UnixDomainConnector {
+    path: std::path::PathBuf,
+}
+
+#[cfg(unix)]
+impl UnixDomainConnector {
+    pub fn new(path: impl Into<std::path::PathBuf>) -> Self { Self { path: path.into() } }
+}
+
+#[cfg(unix)]
+#[async_trait]
+impl RemoteConnector for UnixDomainConnector {
+    async fn connect_stream(
+        &self,
+        _resolver: ThreadSafeDNSResolver,
+        _address: &str,
+        _port: u16,
+        _iface: Option<&OutboundInterface>,
+        #[cfg(target_os = "linux")] _packet_mark: Option<u32>,
+    ) -> std::io::Result<AnyStream> {
+        let s = tokio::net::UnixStream::connect(&self.path).await?;
+        Ok(Box::new(s))
+    }
+
+    async fn connect_datagram(
+        &self,
+        _resolver: ThreadSafeDNSResolver,
+        _src: Option<SocketAddr>,
+        _destination: SocksAddr,
+        _iface: Option<&OutboundInterface>,
+        #[cfg(target_os = "linux")] _packet_mark: Option<u32>,
+    ) -> std::io::Result<AnyOutboundDatagram> {
+        Err(new_io_error("unix datagram not supported"))
+    }
+}
+
 #[async_trait]
 impl RemoteConnector for DirectConnector {
     async fn connect_stream(

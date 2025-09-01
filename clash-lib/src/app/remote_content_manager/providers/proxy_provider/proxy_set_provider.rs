@@ -21,8 +21,9 @@ use crate::{
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
     proxy::{
-        AnyOutboundHandler, direct::DIRECT_OUTBOUND_HANDLER, hysteria2, reject,
-        socks, trojan, vless, vmess,
+        AnyOutboundHandler,
+        direct::{self},
+        hysteria2, reject, socks, trojan, vless, vmess,
     },
 };
 use async_trait::async_trait;
@@ -118,12 +119,11 @@ impl ProxySetProvider {
                             .into_iter()
                             .filter_map(|x| OutboundProxyProtocol::try_from(x).ok())
                             .map(|x| match x {
-                                OutboundProxyProtocol::Direct => {
-                                    Ok(Arc::new(DIRECT_OUTBOUND_HANDLER.clone())
-                                        as _)
+                                OutboundProxyProtocol::Direct(d) => {
+                                    Ok(Arc::new(direct::Handler::new(&d.name)) as _)
                                 }
-                                OutboundProxyProtocol::Reject => {
-                                    Ok(Arc::new(reject::Handler::new()) as _)
+                                OutboundProxyProtocol::Reject(r) => {
+                                    Ok(Arc::new(reject::Handler::new(&r.name)) as _)
                                 }
                                 #[cfg(feature = "shadowsocks")]
                                 OutboundProxyProtocol::Ss(s) => {
@@ -155,6 +155,10 @@ impl ProxySetProvider {
                                 #[cfg(feature = "ssh")]
                                 OutboundProxyProtocol::Ssh(s) => {
                                     let h: ssh::Handler = s.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                                OutboundProxyProtocol::Http(hh) => {
+                                    let h: crate::proxy::http::outbound::Handler = hh.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
                                 #[cfg(feature = "wireguard")]
