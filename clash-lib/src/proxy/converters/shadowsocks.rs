@@ -7,8 +7,9 @@ use crate::{
         HandlerCommonOptions,
         shadowsocks::outbound::{Handler, HandlerOptions},
         transport::{
-            Shadowtls, SimpleOBFSMode, SimpleOBFSOption, SimpleObfsHttp,
-            SimpleObfsTLS, V2RayOBFSOption, V2rayWsClient,
+            GrpcClient, HttpUpgradeClient, KcpClient, Shadowtls, SimpleOBFSMode,
+            SimpleOBFSOption, SimpleObfsHttp, SimpleObfsTLS, V2RayOBFSOption,
+            V2rayWsClient, XhttpClient,
         },
     },
 };
@@ -25,6 +26,99 @@ impl TryFrom<&OutboundShadowsocks> for Handler {
     type Error = crate::Error;
 
     fn try_from(s: &OutboundShadowsocks) -> Result<Self, Self::Error> {
+        // Prefer explicit plugin if provided; otherwise map high-level network → plugin
+        let plugin = match &s.plugin {
+            Some(_) => None, // handled below
+            None => match s.network.as_deref() {
+                Some("ws") => {
+                    // Build V2rayWsClient from ws_opts
+                    let opt: V2RayOBFSOption = {
+                        let mut headers = HashMap::new();
+                        if let Some(h) = s.ws_opts.as_ref()
+                            .and_then(|o| o.headers.as_ref())
+                        {
+                            headers = h.clone();
+                        }
+                        V2RayOBFSOption {
+                            mode: "websocket".to_owned(),
+                            host: s.common_opts.server.clone(),
+                            port: s.common_opts.port,
+                            path: s.ws_opts.as_ref().and_then(|o| o.path.clone()).unwrap_or("/".to_owned()),
+                            tls: s.tls.unwrap_or(false),
+                            headers,
+                            skip_cert_verify: s.skip_cert_verify.unwrap_or(false),
+                            mux: false,
+                        }
+                    };
+                    let plugin = V2rayWsClient::try_from(opt)
+                        .map_err(|e| Error::InvalidConfig(format!("invalid ws opts: {e}")))?;
+                    Some(Box::new(plugin) as _)
+                }
+                Some("http") => {
+                    // Map to simple-obfs http
+                    let host = s
+                        .http_opts
+                        .as_ref()
+                        .and_then(|o| o.headers.as_ref())
+                        .and_then(|h| h.get("Host").cloned())
+                        .unwrap_or_else(|| s.common_opts.server.clone());
+                    Some(Box::new(SimpleObfsHttp::new(host, s.common_opts.port)) as _)
+                }
+                Some("tls") => {
+                    // Map to simple-obfs tls
+                    let host = s
+                        .http_opts
+                        .as_ref()
+                        .and_then(|o| o.headers.as_ref())
+                        .and_then(|h| h.get("Host").cloned())
+                        .unwrap_or_else(|| s.sni.clone().unwrap_or(s.common_opts.server.clone()));
+                    Some(Box::new(SimpleObfsTLS::new(host)) as _)
+                }
+                Some("httpupgrade") => {
+                    let client: HttpUpgradeClient = s
+                        .http_opts
+                        .as_ref()
+                        .ok_or(Error::InvalidConfig(
+                            "http_opts is required for httpupgrade".to_owned(),
+                        ))
+                        .and_then(|x| (x, &s.common_opts).try_into().map_err(|e| Error::InvalidConfig(format!("invalid httpupgrade options: {e}"))))?;
+                    Some(Box::new(client) as _)
+                }
+                Some("xhttp") => {
+                    let client: XhttpClient = s
+                        .http_opts
+                        .as_ref()
+                        .ok_or(Error::InvalidConfig(
+                            "http_opts is required for xhttp".to_owned(),
+                        ))
+                        .and_then(|x| (x, &s.common_opts).try_into().map_err(|e| Error::InvalidConfig(format!("invalid xhttp options: {e}"))))?;
+                    Some(Box::new(client) as _)
+                }
+                Some("grpc") => {
+                    let client: GrpcClient = (s.sni.clone(), s
+                        .grpc_opts
+                        .as_ref()
+                        .ok_or(Error::InvalidConfig(
+                            "grpc_opts is required for grpc".to_owned(),
+                        ))?, &s.common_opts)
+                        .try_into()
+                        .map_err(|e| Error::InvalidConfig(format!("invalid grpc options: {e}")))?;
+                    Some(Box::new(client) as _)
+                }
+                Some("mkcp") => {
+                    let client: KcpClient = s
+                        .kcp_opts
+                        .as_ref()
+                        .ok_or(Error::InvalidConfig(
+                            "kcp_opts is required for mkcp".to_owned(),
+                        ))
+                        .and_then(|x| (x, &s.common_opts).try_into().map_err(|e| Error::InvalidConfig(format!("invalid mkcp options: {e}"))))?;
+                    Some(Box::new(client) as _)
+                }
+                _ => None,
+            },
+        };
+
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
             common_opts: HandlerCommonOptions {
@@ -90,7 +184,7 @@ impl TryFrom<&OutboundShadowsocks> for Handler {
                         )));
                     }
                 },
-                None => None,
+                None => plugin,
             },
             udp: s.udp,
         });

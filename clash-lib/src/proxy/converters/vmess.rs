@@ -5,11 +5,13 @@ use crate::{
     config::internal::proxy::OutboundVmess,
     proxy::{
         HandlerCommonOptions,
-        transport::{GrpcClient, H2Client, TlsClient, WsClient},
+        transport::{
+            GrpcClient, H2Client, HttpClient, HttpUpgradeClient, TlsClient, WsClient,
+            H3Client, XhttpClient, KcpClient, RealityClient,
+        },
         vmess::{Handler, HandlerOptions},
     },
 };
-use crate::proxy::transport::TcpHttpClient;
 
 impl TryFrom<OutboundVmess> for Handler {
     type Error = crate::Error;
@@ -47,18 +49,6 @@ impl TryFrom<&OutboundVmess> for Handler {
                 .network
                 .clone()
                 .map(|x| match x.as_str() {
-                    "tcp_http" => s
-                        .tcp_http_opts
-                        .as_ref()
-                        .map(|x| {
-                            let client: TcpHttpClient = (x, &s.common_opts)
-                                .try_into()
-                                .expect("invalid tcp_http options");
-                            Box::new(client) as _
-                        })
-                        .ok_or(Error::InvalidConfig(
-                            "tcp-http-opts is required for tcp_http".to_owned(),
-                        )),
                     "ws" => s
                         .ws_opts
                         .as_ref()
@@ -82,6 +72,88 @@ impl TryFrom<&OutboundVmess> for Handler {
                         })
                         .ok_or(Error::InvalidConfig(
                             "h2_opts is required for h2".to_owned(),
+                        )),
+                    "http" => s
+                        .http_opts
+                        .as_ref()
+                        .map(|x| {
+                            let client: HttpClient = (x, &s.common_opts)
+                                .try_into()
+                                .expect("invalid http options");
+                            Box::new(client) as _
+                        })
+                        .ok_or(Error::InvalidConfig(
+                            "http_opts is required for http".to_owned(),
+                        )),
+                    "httpupgrade" => s
+                        .http_opts
+                        .as_ref()
+                        .map(|x| {
+                            let client: HttpUpgradeClient = (x, &s.common_opts)
+                                .try_into()
+                                .expect("invalid http options");
+                            Box::new(client) as _
+                        })
+                        .ok_or(Error::InvalidConfig(
+                            "http_opts is required for httpupgrade".to_owned(),
+                        )),
+                    "xhttp" => s
+                        .http_opts
+                        .as_ref()
+                        .map(|x| {
+                            let client: XhttpClient = (x, &s.common_opts)
+                                .try_into()
+                                .expect("invalid xhttp options");
+                            Box::new(client) as _
+                        })
+                        .ok_or(Error::InvalidConfig(
+                            "http_opts is required for xhttp".to_owned(),
+                        )),
+                    "h3" => s
+                        .http_opts
+                        .as_ref()
+                        .map(|x| {
+                            let client: H3Client = (x, &s.common_opts)
+                                .try_into()
+                                .expect("invalid h3 options");
+                            Box::new(client) as _
+                        })
+                        .ok_or(Error::InvalidConfig(
+                            "http_opts is required for h3".to_owned(),
+                        )),
+                    "mkcp" => s
+                        .kcp_opts
+                        .as_ref()
+                        .map(|x| {
+                            let client: KcpClient = (x, &s.common_opts)
+                                .try_into()
+                                .expect("invalid mkcp options");
+                            Box::new(client) as _
+                        })
+                        .ok_or(Error::InvalidConfig(
+                            "kcp_opts is required for mkcp".to_owned(),
+                        )),
+                    "reality" => s
+                        .http_opts
+                        .as_ref()
+                        .map(|_x| {
+                            let client = RealityClient::new(
+                                crate::proxy::transport::RealityOptions {
+                                    skip_cert_verify: s.skip_cert_verify.unwrap_or_default(),
+                                    sni: s
+                                        .server_name
+                                        .clone()
+                                        .or(Some(s.common_opts.server.clone())),
+                                    alpn: Some(vec![
+                                        "h2".to_owned(),
+                                        "http/1.1".to_owned(),
+                                    ]),
+                                },
+                            );
+                            Box::new(client) as _
+                        })
+                        .ok_or(Error::InvalidConfig(
+                            "http_opts is required for reality".to_owned(),
                         )),
                     "grpc" => s
                         .grpc_opts
@@ -120,9 +192,9 @@ impl TryFrom<&OutboundVmess> for Handler {
                         s.network
                             .as_ref()
                             .map(|x| match x.as_str() {
-                                "tcp_http" => Ok(vec!["http/1.1".to_owned()]),
                                 "ws" => Ok(vec!["http/1.1".to_owned()]),
                                 "http" => Ok(vec![]),
+                                "xhttp" => Ok(vec!["http/1.1".to_owned()]),
                                 "h2" | "grpc" => Ok(vec!["h2".to_owned()]),
                                 _ => Err(Error::InvalidConfig(format!(
                                     "unsupported network: {x}"

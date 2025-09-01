@@ -12,6 +12,12 @@ pub enum InboundOpts {
         #[serde(flatten)]
         common_opts: CommonInboundOpts,
     },
+    #[serde(alias = "trojan")]
+    Trojan {
+        #[serde(flatten)]
+        common_opts: CommonInboundOpts,
+        password: String,
+    },
     #[serde(alias = "socks")]
     Socks {
         #[serde(flatten)]
@@ -54,6 +60,18 @@ pub enum InboundOpts {
         cipher: String,
         password: String,
     },
+    #[serde(alias = "vmess")]
+    Vmess {
+        #[serde(flatten)]
+        common_opts: CommonInboundOpts,
+        uuid: String,
+    },
+    #[serde(alias = "vless")]
+    Vless {
+        #[serde(flatten)]
+        common_opts: CommonInboundOpts,
+        uuid: String,
+    },
 }
 
 impl InboundOpts {
@@ -67,8 +85,11 @@ impl InboundOpts {
             InboundOpts::Tunnel { common_opts, .. } => common_opts,
             #[cfg(feature = "redir")]
             InboundOpts::Redir { common_opts, .. } => common_opts,
+            InboundOpts::Trojan { common_opts, .. } => common_opts,
             #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
+            InboundOpts::Vmess { common_opts, .. } => common_opts,
+            InboundOpts::Vless { common_opts, .. } => common_opts,
         }
     }
 
@@ -82,8 +103,11 @@ impl InboundOpts {
             InboundOpts::Tunnel { common_opts, .. } => common_opts,
             #[cfg(feature = "redir")]
             InboundOpts::Redir { common_opts, .. } => common_opts,
+            InboundOpts::Trojan { common_opts, .. } => common_opts,
             #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
+            InboundOpts::Vmess { common_opts, .. } => common_opts,
+            InboundOpts::Vless { common_opts, .. } => common_opts,
         }
     }
 }

@@ -161,6 +161,16 @@ fn build_handler(
         })
         .map(|x| Arc::new(x) as _)
         .ok(),
+        InboundOpts::Trojan { common_opts, password } => Some(Arc::new(
+            crate::proxy::trojan::inbound::TrojanInbound::new(
+                (common_opts.listen.0, common_opts.port).into(),
+                common_opts.allow_lan,
+                password.clone(),
+                dispatcher,
+                authenticator,
+                fw_mark,
+            ),
+        )),
         #[cfg(feature = "shadowsocks")]
         InboundOpts::Shadowsocks {
             common_opts,
@@ -177,5 +187,25 @@ fn build_handler(
             authenticator,
             fw_mark: common_opts.fw_mark,
         }))),
+        InboundOpts::Vmess { common_opts, uuid } => Some(Arc::new(
+            crate::proxy::vmess::inbound::VmessInbound::new(
+                (common_opts.listen.0, common_opts.port).into(),
+                common_opts.allow_lan,
+                uuid.clone(),
+                dispatcher,
+                authenticator,
+                fw_mark,
+            ),
+        )),
+        InboundOpts::Vless { common_opts, uuid } => Some(Arc::new(
+            crate::proxy::vless::inbound::VlessInbound::new(
+                (common_opts.listen.0, common_opts.port).into(),
+                common_opts.allow_lan,
+                uuid.clone(),
+                dispatcher,
+                authenticator,
+                fw_mark,
+            ),
+        )),
     }
 }

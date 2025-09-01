@@ -76,7 +76,7 @@ port: 7890
 
 ### Run
 ```shell
--> % ./target/debug/clash -c sample.yaml
+-> % ./target/debug/clash-rs -c sample.yaml
 ```
 
 ### Help
@@ -108,6 +108,12 @@ chmod +x scripts/build_apple.sh
 ```
 
 This command will generate a `clashrs.xcframework` file in the `build` directory.
+
+### iOS integration notes
+
+- Default iOS build in this repo targets the `ring` crypto backend for compatibility.
+- For SOCKS-based tunneling (e.g., with a system tunnel front-end), enable `socks-port` or `mixed-port` in config and set rules to forward via a proxy group instead of `DIRECT`.
+- For system-level TUN, rebuild the XCFramework with `clash-lib` feature `tun` enabled and integrate with `NEPacketTunnelProvider`.
 
 ## 🔗 Links
 

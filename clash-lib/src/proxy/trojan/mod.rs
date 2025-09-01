@@ -29,6 +29,7 @@ use super::{
 };
 
 mod datagram;
+pub mod inbound;
 
 pub struct HandlerOptions {
     pub name: String,

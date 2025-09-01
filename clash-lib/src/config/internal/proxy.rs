@@ -49,10 +49,10 @@ pub fn map_serde_error(
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 #[serde(tag = "type")]
 pub enum OutboundProxyProtocol {
-    #[serde(skip)]
-    Direct,
-    #[serde(skip)]
-    Reject,
+    #[serde(rename = "direct")]
+    Direct(OutboundDirect),
+    #[serde(rename = "reject")]
+    Reject(OutboundReject),
     #[cfg(feature = "shadowsocks")]
     #[serde(rename = "ss")]
     Ss(OutboundShadowsocks),
@@ -75,6 +75,8 @@ pub enum OutboundProxyProtocol {
     Tuic(OutboundTuic),
     #[serde(rename = "hysteria2")]
     Hysteria2(OutboundHysteria2),
+    #[serde(rename = "http")]
+    Http(OutboundHttp),
     #[serde(rename = "ssh")]
     #[cfg(feature = "ssh")]
     Ssh(OutboundSsh),
@@ -86,8 +88,8 @@ pub enum OutboundProxyProtocol {
 impl OutboundProxyProtocol {
     fn name(&self) -> &str {
         match &self {
-            OutboundProxyProtocol::Direct => PROXY_DIRECT,
-            OutboundProxyProtocol::Reject => PROXY_REJECT,
+            OutboundProxyProtocol::Direct(direct) => &direct.name,
+            OutboundProxyProtocol::Reject(reject) => &reject.name,
             #[cfg(feature = "shadowsocks")]
             OutboundProxyProtocol::Ss(ss) => &ss.common_opts.name,
             OutboundProxyProtocol::Socks5(socks5) => &socks5.common_opts.name,
@@ -107,6 +109,7 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Ssh(ssh) => &ssh.common_opts.name,
             #[cfg(feature = "shadowquic")]
             OutboundProxyProtocol::ShadowQuic(sq) => &sq.common_opts.name,
+            OutboundProxyProtocol::Http(http) => &http.common_opts.name,
         }
     }
 }
@@ -133,8 +136,8 @@ impl Display for OutboundProxyProtocol {
             #[cfg(feature = "shadowsocks")]
             OutboundProxyProtocol::Ss(_) => write!(f, "Shadowsocks"),
             OutboundProxyProtocol::Socks5(_) => write!(f, "Socks5"),
-            OutboundProxyProtocol::Direct => write!(f, "{PROXY_DIRECT}"),
-            OutboundProxyProtocol::Reject => write!(f, "{PROXY_REJECT}"),
+            OutboundProxyProtocol::Direct(_) => write!(f, "{PROXY_DIRECT}"),
+            OutboundProxyProtocol::Reject(_) => write!(f, "{PROXY_REJECT}"),
             OutboundProxyProtocol::Trojan(_) => write!(f, "Trojan"),
             OutboundProxyProtocol::Vmess(_) => write!(f, "Vmess"),
             OutboundProxyProtocol::Vless(_) => write!(f, "Vless"),
@@ -149,6 +152,7 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Ssh(_) => write!(f, "Ssh"),
             #[cfg(feature = "shadowquic")]
             OutboundProxyProtocol::ShadowQuic(_) => write!(f, "ShadowQUIC"),
+            OutboundProxyProtocol::Http(_) => write!(f, "Http"),
         }
     }
 }
@@ -169,6 +173,18 @@ pub struct CommonConfigOptions {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
+pub struct OutboundDirect {
+    pub name: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundReject {
+    pub name: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct OutboundShadowsocks {
     #[serde(flatten)]
     pub common_opts: CommonConfigOptions,
@@ -178,6 +194,20 @@ pub struct OutboundShadowsocks {
     pub udp: bool,
     pub plugin: Option<String>,
     pub plugin_opts: Option<HashMap<String, serde_yaml::Value>>,
+    /// Optional high-level transport mapping (when plugin not specified)
+    pub network: Option<String>,
+    /// websocket transport options (for network = "ws")
+    pub ws_opts: Option<WsOpt>,
+    /// http/http-obfs transport options (for network = "http" or "tls")
+    pub http_opts: Option<HttpOpt>,
+    /// grpc transport options (for network = "grpc")
+    pub grpc_opts: Option<GrpcOpt>,
+    /// mkcp transport options (for network = "mkcp")
+    pub kcp_opts: Option<KcpOpt>,
+    /// optional TLS controls for plugin-based transports
+    pub tls: Option<bool>,
+    pub sni: Option<String>,
+    pub skip_cert_verify: Option<bool>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
@@ -198,6 +228,18 @@ pub struct OutboundSocks5 {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
+pub struct OutboundHttp {
+    #[serde(flatten)]
+    pub common_opts: CommonConfigOptions,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub tls: Option<bool>,
+    pub sni: Option<String>,
+    pub skip_cert_verify: Option<bool>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct WsOpt {
     pub path: Option<String>,
     pub headers: Option<HashMap<String, String>>,
@@ -210,15 +252,30 @@ pub struct H2Opt {
     pub host: Option<Vec<String>>,
     pub path: Option<String>,
 }
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
-pub struct TcpHttpOpt {
-    pub host: Option<String>,
+#[serde(rename_all = "kebab-case")]
+pub struct HttpOpt {
     pub path: Option<String>,
+    pub headers: Option<HashMap<String, String>>,
+    /// GET or POST; default POST
+    pub method: Option<String>,
 }
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct GrpcOpt {
     pub grpc_service_name: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct KcpOpt {
+    pub seed: Option<String>,
+    pub mtu: Option<u32>,
+    pub tti: Option<u32>,
+    pub uplink_capacity: Option<u32>,
+    pub downlink_capacity: Option<u32>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
@@ -232,9 +289,10 @@ pub struct OutboundTrojan {
     pub skip_cert_verify: Option<bool>,
     pub udp: Option<bool>,
     pub network: Option<String>,
+    pub http_opts: Option<HttpOpt>,
     pub grpc_opts: Option<GrpcOpt>,
+    pub kcp_opts: Option<KcpOpt>,
     pub ws_opts: Option<WsOpt>,
-    pub tcp_http_opts: Option<TcpHttpOpt>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
@@ -252,10 +310,11 @@ pub struct OutboundVmess {
     #[serde(alias = "servername")]
     pub server_name: Option<String>,
     pub network: Option<String>,
+    pub http_opts: Option<HttpOpt>,
     pub ws_opts: Option<WsOpt>,
+    pub kcp_opts: Option<KcpOpt>,
     pub h2_opts: Option<H2Opt>,
     pub grpc_opts: Option<GrpcOpt>,
-    pub tcp_http_opts: Option<TcpHttpOpt>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
@@ -270,10 +329,11 @@ pub struct OutboundVless {
     #[serde(alias = "servername")]
     pub server_name: Option<String>,
     pub network: Option<String>,
+    pub http_opts: Option<HttpOpt>,
     pub ws_opts: Option<WsOpt>,
+    pub kcp_opts: Option<KcpOpt>,
     pub h2_opts: Option<H2Opt>,
     pub grpc_opts: Option<GrpcOpt>,
-    pub tcp_http_opts: Option<TcpHttpOpt>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]

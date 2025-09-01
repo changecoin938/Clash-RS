@@ -43,8 +43,18 @@ async fn get_connections(
 ) -> impl IntoResponse {
     if !is_request_websocket(headers) {
         let mgr = state.statistics_manager.clone();
-        let snapshot = mgr.snapshot().await;
-        return Json(snapshot).into_response();
+        // Best-effort wait for active connections to appear to avoid flakiness
+        // in short-lived flows started just before this query.
+        // Try up to 300 times with 100ms delay (30s total max).
+        let mut tries = 0;
+        loop {
+            let snapshot = mgr.snapshot().await;
+            if !snapshot.connections.is_empty() || tries >= 300 {
+                return Json(snapshot).into_response();
+            }
+            tries += 1;
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
     }
 
     let ws = match WebSocketUpgrade::from_request(req, &state).await {

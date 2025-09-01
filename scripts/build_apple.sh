@@ -43,6 +43,10 @@ for target in "${IOS_ARCHS[@]}" "${MACOS_ARCHS[@]}"; do
     rustup target add "$target" --toolchain $TOOLCHAIN || echo "Target $target is Tier 3 and may need local stdlib build."
 done
 
+# Create output directory
+mkdir -p "$OUTPUT_DIR"
+mkdir -p "$HEADERS_DIR"
+
 # Generate C header file using cbindgen
 echo "Generating C header file..."
 cbindgen --config $CRATE_NAME/cbindgen.toml --crate $CRATE_NAME --output $HEADER_FILE
@@ -54,14 +58,10 @@ module $LIB_NAME {
 }
 EOF
 
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
-mkdir -p "$HEADERS_DIR"
-
 # Build for all targets
 echo "Building library for iOS and macOS targets..."
 for target in "${IOS_ARCHS[@]}" "${MACOS_ARCHS[@]}"; do
-    cargo +$TOOLCHAIN build --target "$target" --release
+    cargo +$TOOLCHAIN build -p $CRATE_NAME --target "$target" --release
     mkdir -p "$OUTPUT_DIR/$target"
     cp "target/$target/release/lib${LIB_NAME}.a" "$OUTPUT_DIR/$target/"
 done
